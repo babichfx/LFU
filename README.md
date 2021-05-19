@@ -1,3 +1,4 @@
 # LFU
-Least Frequently Used
-Task from MIPT lecture_00, from Konstantin Vladimirov.
+Least Frequently Used Cache
+
+MIPT lecture_00 task, from Konstantin Vladimirov.
