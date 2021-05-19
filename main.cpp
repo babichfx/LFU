@@ -1,15 +1,22 @@
 #include <iostream>
 #include <vector>
-#include <array>
+#include <deque>
+#include <chrono>
+#include <random>
+#include <time.h>
 
-#define DOLOG     false
+#define DOLOG           false
+#define CACHESIZE       10
+#define TESTSIZE        1000000
+#define DATAPIECES      50
+#define LOADPROCESSDUR  10
 
 template <typename T>
 class CacheLFU{
     //typename used to clarify that is type and not any other thing
     using vecIt = typename std::vector<T>::iterator;
 
-    class Counter{
+    class Counter{ //to save informatoin about frequently using
         uint  count;
         vecIt dataIt;
     public:
@@ -24,20 +31,19 @@ class CacheLFU{
     size_t hits, works; //stat
     std::vector<T> cacheArray;
     std::vector<Counter> counterArray;
+    timespec timeSl, tmTmp;
 
     using cntIt = typename std::vector<Counter>::iterator;
 
     vecIt lookingForDataInCache(const T& newData){
         if(DOLOG)
             std::cout << "Looking for: " << newData << "... ";
-        for(auto it = cacheArray.begin(); it != cacheArray.end(); it++){
-            if(*it == newData)
-                return it;
-        }
-        return cacheArray.end();
+        return find(cacheArray.begin(), cacheArray.end(), newData);
     }
     vecIt addNewDataToCache(const T& newData) {
         cacheArray.push_back(newData);
+        works++;
+        nanosleep(&timeSl, &tmTmp); //simulate long process
         if(DOLOG)
             std::cout << "Added data: " << *(--(cacheArray.end())) << std::endl;
         return --(cacheArray.end());
@@ -46,6 +52,8 @@ class CacheLFU{
         if(DOLOG)
             std::cout << *vIt << " replaced with: " << newData << std::endl;
         *vIt = newData;
+        works++;
+        nanosleep(&timeSl, &tmTmp); //simulate long process
     }
     cntIt findCounterItForData(const vecIt& vIt){
         for(auto it = counterArray.begin(); it != counterArray.end(); ++it){
@@ -57,12 +65,10 @@ class CacheLFU{
     void  addNewCounter(const vecIt& newIt) {
         counterArray.push_back(Counter(newIt));
         incrementCounter(counterArray.end()-1);
-        works++;
     }
     void  replaceCounter(const cntIt& cIt) {
         *cIt = Counter(cIt->getDataIterator());
         incrementCounter(cIt);
-        works++;
     }
     //const is working because iterator save a pointer to memory
     //and const iterator cant allow to changethe pointer itself
@@ -78,6 +84,8 @@ public:
         cacheArray.shrink_to_fit();
         cacheArray.clear();
         hits = works = 0;
+        timeSl.tv_sec = 0;
+        timeSl.tv_nsec = LOADPROCESSDUR;
     }
     void  loadNewElement(const T& newData){
         vecIt dataCacheIt = lookingForDataInCache(newData);
@@ -89,7 +97,7 @@ public:
                 cntIt counterIt;
                 uint tmpCount = UINT32_MAX;
                 for(auto it=counterArray.begin(); it!=counterArray.end(); ++it){
-                    if( tmpCount >= it->getCount() ){
+                    if( tmpCount > it->getCount() ){
                         tmpCount = it->getCount();
                         counterIt = it;
                     }//if
@@ -136,21 +144,27 @@ int main()
     using std::cout;
     using std::endl;
 
-    CacheLFU<int> cache1(3);
-    std::array<int, 15> inData1 = {7,0,1,2,0,3,0,4,2,3,0,3,1,2,0};
+    CacheLFU<int> cache1(CACHESIZE);
+
+    std::deque<int> inData1;
+    std::srand(15);
+    for(int i=0; i<TESTSIZE; i++)
+        inData1.push_back(rand() % DATAPIECES);
+
+    std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+
     for(const auto& el : inData1)
         cache1.loadNewElement(el);
-    cache1.printCounters();
+
+    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+
     cache1.printCache();
     cache1.printStat();
 
-    CacheLFU<int> cache2(3);
-    std::array<int, 15> inData2 = {0,1,0,0,2,2,4,3,3,1,0,2,2,1,0};
-    for(const auto& el : inData2)
-        cache2.loadNewElement(el);
-    cache2.printCounters();
-    cache2.printCache();
-    cache2.printStat();
+    std::cout << "Time difference = " << std::chrono::duration_cast<std::chrono::microseconds>
+                 (end - begin).count()/1000000.0 << "[sec]" << std::endl;
+    std::cout << "Time difference = " << std::chrono::duration_cast<std::chrono::microseconds>
+                 (end - begin).count() << "[µs]" << std::endl;
 
     return 0;
 }
